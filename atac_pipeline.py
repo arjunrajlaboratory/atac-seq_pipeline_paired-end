@@ -24,6 +24,7 @@ picard_metrics_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.picardM
 picard_input = step1b_filtered_bam_file
 picard_output = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.picardMarkedDups.bam'
 final_bam_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.bam'
+final_bam_stats = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.stats.txt'
 
 #constants
 bt2_multimapping = 4
@@ -58,12 +59,12 @@ def main():
 	#					bit 2: "each segment properly aligned according to the aligner"
 
 	#samtools view -h ${TMP_FILT_BAM_FILE} | assign_multimappers.py -k $multimapping --paired-end | samtools fixmate -r /dev/stdin ${TMP_FILT_FIXMATE_BAM_FILE}
-	assign_multimappers = './encode_utils/assign_multimappers.py'
-	logger.debug('Assigning multimappers, adding header, and fixing mates?: {0}'.format(sample_name))
+	#./set_atac_paths samtools view -h /Users/emsanford/Desktop/atac_dev_temp/testStep1b.tmp.filt.bam | python ./encode_utils/assign_multimappers.py -k 4 --paired-end | ./set_atac_paths samtools fixmate -r /dev/stdin assignMultimapTest_noChange
+	logger.debug('Adding header, filtering out secondary alignments, and fixing mates: {0}'.format(sample_name))
 	os.system(' '.join(['samtools', 'view', '-h', step1b_tmp_filt_output, 
-		'|', 'python', assign_multimappers, '-k', str(bt2_multimapping), '--paired-end',
 		'|', 'samtools', 'fixmate', '-r', '/dev/stdin', step1b_tmp_filt_fixmate_output]))
-	#TODO: confirm if the assign_multimappers script is doing anything at all (doesn't seem to be) and why it is necessary here.
+	# It appears to unnecessarily discard reads, as "secondary alignments" are discarded by downstream steps and it discards all reads
+	# when there are "k" candidate alignments.
 
 	#samtools view -F 1804 -f 2 -u ${TMP_FILT_FIXMATE_BAM_FILE} | sambamba sort /dev/stdin -o ${FILT_BAM_FILE}
 	logger.debug('Removing secondary alignments, optical duplicates, and sorting by position: {0}'.format(sample_name))
@@ -96,8 +97,8 @@ def main():
 	os.system(' '.join(['samtools', 'index', final_bam_file]))
 
 	# # samtools flagstat ${FINAL_BAM_FILE} > ${FINAL_BAM_FILE_MAPSTATS}
-	# logger.debug(' for sample: {0}'.format(sample_name))
-	# os.system(' '.join([])
+	logger.debug('Counting read stats for sample: {0}'.format(sample_name))
+	os.system(' '.join(['samtools', 'flagstat', final_bam_file, '>' ])
 	# logger.info('Finished filtering reads for sample: {0}'.format(sample_name))
 
 	#TODO remove unnecessary intermediate files
