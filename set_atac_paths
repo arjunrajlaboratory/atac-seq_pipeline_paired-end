@@ -1,0 +1,6 @@
+#!/bin/bash
+PATH=\
+/Users/emsanford/Desktop/syd_atac_temp/bowtie2-2.3.4.1-macos-x86_64:\
+/Users/emsanford/Desktop/syd_atac_temp/samtools_1.8_installation_dir/bin:\
+$PATH \
+$@
