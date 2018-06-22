@@ -26,6 +26,8 @@ picard_output = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.picardMarkedD
 final_bam_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.bam'
 final_bam_stats = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.stats.txt'
 
+pbc_qc_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.pbc.qc.txt'
+
 #constants
 bt2_multimapping = 4
 
@@ -33,7 +35,9 @@ bt2_multimapping = 4
 def main():
 	logger=logging.getLogger()
 
+	##################################
 	# Step 1a: Align reads
+	##################################
 	logger.info('Aligning reads for sample: {0}'.format(sample_name))
 
 	os.system(' '.join(['bowtie2', '-k', str(bt2_multimapping), '--local', '-x', bowtie2_index, '-1', read1_path, '-2', read2_path, 
@@ -43,7 +47,9 @@ def main():
 
 	logger.info('Finished aligning reads for sample: {0}'.format(sample_name))
 
+	##################################
 	# Step 1b: Filter alignments
+	##################################
 	logger.info('Filtering reads for sample: {0}'.format(sample_name))
 
 	#samtools view -F 524 -f 2 -u ${RAW_BAM_FILE} | sambamba -n /dev/stdin -o ${TMP_FILT_BAM_FILE}
@@ -62,13 +68,11 @@ def main():
 	#./set_atac_paths samtools view -h /Users/emsanford/Desktop/atac_dev_temp/testStep1b.tmp.filt.bam | python ./encode_utils/assign_multimappers.py -k 4 --paired-end | ./set_atac_paths samtools fixmate -r /dev/stdin assignMultimapTest_noChange
 	logger.debug('Adding header, filtering out secondary alignments, and fixing mates: {0}'.format(sample_name))
 	os.system(' '.join(['samtools', 'view', '-h', step1b_tmp_filt_output, 
-		'|', 'samtools', 'fixmate', '-r', '/dev/stdin', step1b_tmp_filt_fixmate_output]))
-	# It appears to unnecessarily discard reads, as "secondary alignments" are discarded by downstream steps and it discards all reads
-	# when there are "k" candidate alignments.
+				   '|', 'samtools', 'fixmate', '-r', '/dev/stdin', step1b_tmp_filt_fixmate_output]))
 
 	#samtools view -F 1804 -f 2 -u ${TMP_FILT_FIXMATE_BAM_FILE} | sambamba sort /dev/stdin -o ${FILT_BAM_FILE}
-	logger.debug('Removing secondary alignments, optical duplicates, and sorting by position: {0}'.format(sample_name))
-	os.system(' '.join(['samtools', 'view', '-F', '1804', '-f', '2', '-u', step1b_tmp_filt_fixmate_output,
+	logger.debug('Removing low map-quality alignments, optical duplicates, and sorting by position: {0}'.format(sample_name))
+	os.system(' '.join(['samtools', 'view', '-q', '20', '-F', '1804', '-f', '2', '-u', step1b_tmp_filt_fixmate_output,
 						'|', 'samtools', 'sort', '/dev/stdin', '-o', step1b_filtered_bam_file]))
 	# samtools view: 
 	#               -F 1804  (-F is "blacklist" for certain flag bits)
@@ -96,35 +100,30 @@ def main():
 	logger.debug('Indexing final BAM file for sample: {0}'.format(sample_name))
 	os.system(' '.join(['samtools', 'index', final_bam_file]))
 
-	# # samtools flagstat ${FINAL_BAM_FILE} > ${FINAL_BAM_FILE_MAPSTATS}
+	# samtools flagstat ${FINAL_BAM_FILE} > ${FINAL_BAM_FILE_MAPSTATS}
 	logger.debug('Counting read stats for sample: {0}'.format(sample_name))
-	os.system(' '.join(['samtools', 'flagstat', final_bam_file, '>' ])
-	# logger.info('Finished filtering reads for sample: {0}'.format(sample_name))
+	os.system(' '.join(['samtools', 'flagstat', final_bam_file, '>', final_bam_stats]))
+
+	# TODO: replace this PBC QC file instructions with the instructions for paired end reads (this part I accidentally did for the single-end read pipeline)
+	# bedtools bamtobed -i ${FILT_BAM_FILE} | awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$6}' | grep -v 'chrM' | sort | uniq -c | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf "%d\t%d\t%d\t%d\t%f\t%f\t%f\n",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}' > ${PBC_FILE_QC}
+	logger.debug('Creating PBC QC file for BAM with PCR duplicates for sample: {0}'.format(sample_name))
+	# PBC File output format:
+			# TotalReadPairs [tab] DistinctReadPairs [tab] OneReadPair [tab] TwoReadPairs [tab] NRF=Distinct/Total [tab] PBC1=OnePair/Distinct [tab] PBC2=OnePair/TwoPair
+	cmd = "bedtools bamtobed -i {0}".format(step1b_filtered_bam_file) + \
+		   " | awk 'BEGIN{OFS=\"\\t\"}{print $1,$2,$3,$6}'" + \
+		   " | grep -v 'chrM' | sort | uniq -c" + \
+		   " | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf \"%d\\t%d\\t%d\\t%d\\t%f\\t%f\\t%f\\n\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}'" + \
+		   " > {0}".format(pbc_qc_file)
+	os.system(cmd)
+
+	logger.info('Finished filtering reads for sample: {0}'.format(sample_name))
+
+	##################################
+	# Step 2a: Convert PE BAM to tagAlign
+	##################################
 
 	#TODO remove unnecessary intermediate files
 
-
-# # =============================
-# # Compute library complexity
-# # =============================
-# # Sort by name
-# # convert to bedPE and obtain fragment coordinates
-# # sort by position and strand
-# # Obtain unique count statistics
-
-# module add bedtools/2.26
-
-# PBC_FILE_QC="${FINAL_BAM_PREFIX}.pbc.qc"
-
-# # TotalReadPairs [tab] DistinctReadPairs [tab] OneReadPair [tab] TwoReadPairs [tab] NRF=Distinct/Total [tab] PBC1=OnePair/Distinct [tab] PBC2=OnePair/TwoPair
-
-
-# sambamba sort -n ${FILT_BAM_FILE} -o ${OFPREFIX}.srt.tmp.bam
-# bedtools bamtobed -bedpe -i ${OFPREFIX}.srt.tmp.bam | awk 'BEGIN{OFS="\t"}{print $1,$2,$4,$6,$9,$10}' | grep -v 'chrM' | sort | uniq -c | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf "%d\t%d\t%d\t%d\t%f\t%f\t%f\n",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}' > ${PBC_FILE_QC}
-# rm ${OFPREFIX}.srt.tmp.bam
-
-# rm ${FILT_BAM_FILE}
-# # =============================
 
 #def _argparser():
 
