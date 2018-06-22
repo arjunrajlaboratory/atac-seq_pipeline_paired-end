@@ -25,6 +25,12 @@ picard_input = step1b_filtered_bam_file
 picard_output = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.picardMarkedDups.bam'
 final_bam_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.bam'
 final_bam_stats = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.stats.txt'
+final_bam_file_namesorted = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.nameSorted.bam'
+
+final_tagalign_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.tagAlign.gz'
+final_bedpe_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.bedpe.gz'
+n_subsampled_reads = str(5000000)
+subsampled_tagalign_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.subsampled.tagAlign.gz'
 
 pbc_qc_file = '/Users/emsanford/Desktop/atac_dev_temp/testStep1b.final.pbc.qc.txt'
 
@@ -34,6 +40,8 @@ bt2_multimapping = 4
 
 def main():
 	logger=logging.getLogger()
+
+	#TODO remove unnecessary intermediate files
 
 	##################################
 	# Step 1a: Align reads
@@ -121,8 +129,30 @@ def main():
 	##################################
 	# Step 2a: Convert PE BAM to tagAlign
 	##################################
+	
+	# Create "virtual single-ended file" 
+	logger.debug('Creating tagAlign formatted file: {0}'.format(sample_name))
+	cmd = "bedtools bamtobed -i {0}".format(final_bam_file) + \
+	 r"""| awk 'BEGIN{OFS="\t"}{$4="N";$5="1000";print $0}' """ + \
+		"| gzip -nc > {0}".format(final_tagalign_file)
+	os.system(cmd)
 
-	#TODO remove unnecessary intermediate files
+	#bedtools bamtobed -bedpe -mate1 -i ${FINAL_NMSRT_BAM_FILE} | gzip -nc > ${FINAL_BEDPE_FILE}
+	logger.debug('Creating temporary name-sorted final BAM: {0}'.format(sample_name))
+	os.system('samtools sort -n {0} > {1}'.format(final_bam_file, final_bam_file_namesorted))
+	logger.debug('Creating BEDPE file from name-sorted final BAM: {0}'.format(sample_name))
+	os.system('bedtools bamtobed -bedpe -mate1 -i {0} | gzip -nc > {1}'.format(final_bam_file_namesorted, final_bedpe_file))
+	logger.debug('Removing temporary name-sorted final BAM file: {0}'.format(sample_name))
+	os.system('rm {0}'.format(final_bam_file_namesorted))
+
+	#zcat ${FINAL_BEDPE_FILE} | grep -v "chrM" | shuf -n ${NREADS} --random-source=${FINAL_BEDPE_FILE}  | awk 'BEGIN{OFS="\t"}{print $1,$2,$3,"N","1000",$9}' | gzip -nc > ${SUBSAMPLED_TA_FILE}
+	logger.debug('Subsampling tagAlign file to {1} reads, excluding chrM: {0}'.format(sample_name, n_subsampled_reads))
+	cmd = 'zcat {0} '.format(final_bedpe_file) + \
+	'| grep -v "chrM" ' + \
+	'| shuf -n {0} --random-source={1} '.format(n_subsampled_reads, final_bedpe_file) + \
+	r"""| awk 'BEGIN{OFS="\t"}{print $1,$2,$3,"N","1000",$9}' """ + \
+	'| gzip -nc > ${0}'.format(subsampled_tagalign_file)
+	os.system(cmd)
 
 
 #def _argparser():
