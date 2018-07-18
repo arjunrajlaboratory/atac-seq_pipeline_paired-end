@@ -7,52 +7,60 @@ import os
 
 # note: the call to this script should be preprended with a "wrapper" command that sets the paths for the appropriate versions of each tool called in this pipeline
 
+#TODO remove unnecessary intermediate files
+#TODO rename intermediate files with more descriptive names
+#TODO add number of threads for bowtie?
+
+#input data
+# input_data_dir = '/home/esanford/data/history_dependence_pilot_18Jul2018_concatenated_lanes'
+# sample_name = '10-RA_to_E2andRA'
+# output_dir     = '/home/esanford/dev_atac_seq_pipeline/test_pipeline_outputs'
+sample_name       = sys.argv[1]
+input_data_dir    = sys.argv[2]
+output_dir        = sys.argv[3]
+n_bowtie2_threads = sys.argv[4]
+read1_path     = '{0}/{1}'.format(input_data_dir, sample_name + '_R1.fastq.gz')
+read2_path     = '{0}/{1}'.format(input_data_dir, sample_name + '_R2.fastq.gz')
 
 #software references
 refs_dir = '/home/esanford/refs'
-bowtie2_index = refs_dir + '/bowtie2/hg19/hg19'
+# hg38 index
+bowtie2_index = refs_dir + '/bowtie2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.bowtie_index'
 
-#input data
-input_data_dir = '/home/esanford/dev_atac_seq_pipeline/test_data'
-sample_name = 'ENCLB034CND'
-# read1_path = '{0}/{1}/{2}'.format(input_data_dir, sample_name, 'ENCFF581SDL_downsampled.fastq.gz')
-# read2_path = '{0}/{1}/{2}'.format(input_data_dir, sample_name, 'ENCFF157FMZ_downsampled.fastq.gz')
-read1_path = '{0}/{1}/{2}'.format(input_data_dir, sample_name, 'ENCFF581SDL.fastq.gz')
-read2_path = '{0}/{1}/{2}'.format(input_data_dir, sample_name, 'ENCFF157FMZ.fastq.gz')
 
-#output tree
-output_dir = '/home/esanford/dev_atac_seq_pipeline/test_pipeline_outputs'
-output_dir_sample              = output_dir + '/' + sample_name
+
+#setup output filepaths
+output_dir_sample  = output_dir + '/' + sample_name
+if not os.path.exists(output_dir_sample):
+	os.makedirs(output_dir_sample)
+
 bowtie2_stderr_logfile         = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'log_stderr_bowtie2.txt')
 bowtie2_aligned_reads          = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'bowtie2_aligned_reads.bam')
 
 step1b_tmp_filt_output         = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.tmp.filt.bam')
 step1b_tmp_filt_fixmate_output = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.tmp.filt.fixmate.bam')
 step1b_filtered_bam_file       = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.filt.bam')
-picard_metrics_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.picardMetrics.txt')
-picard_output                  = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.picardMarkedDups.bam')
-final_bam_file                 = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.bam')
-final_bam_stats                = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.stats.txt')
-final_bam_file_namesorted      = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.nameSorted.bam')
+picard_metrics_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'picardMetrics.txt')
+picard_output                  = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'picardMarkedDups.bam')
+final_bam_file                 = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.bam')
+final_bam_stats                = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.stats.txt')
+final_bam_file_namesorted      = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.nameSorted.bam')
 
-final_tagalign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.tagAlign.gz')
-final_bedpe_file               = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.bedpe.gz')
+final_tagalign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.tagAlign.gz')
+final_bedpe_file               = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.bedpe.gz')
 
-subsampled_tagalign_file       = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.subsampled.tagAlign.gz')
+subsampled_tagalign_file       = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'subsampled.tagAlign.gz')
 
-pbc_qc_file                    = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'testStep1b.final.pbc.qc.txt')
+pbc_qc_file                    = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.pbc.qc.txt')
 
 #constants
 bt2_multimapping    = 4
-bt2_max_frag_len    = 2000
-n_subsampled_reads  = 5000000
+bt2_max_frag_len    = 5000
+n_subsampled_reads  = 10000000
 
 
 def main():
 	logger=logging.getLogger()
-
-	#TODO remove unnecessary intermediate files
-	#TODO add making output directories if they don't exist
 
 	##################################
 	# Step 1a: Align reads
@@ -61,7 +69,8 @@ def main():
 	logger.info('Aligning reads for sample: {0}'.format(sample_name))
 
 	cmd = ' '.join(['bowtie2', '-k', str(bt2_multimapping), '--local', 
-		           '--maxins', str(bt2_max_frag_len), '-x', bowtie2_index, 
+		           '--maxins', str(bt2_max_frag_len), '-x', bowtie2_index,
+		           '--threads', n_bowtie2_threads, 
 		           '-1', read1_path, '-2', read2_path, 
 		           '2>', bowtie2_stderr_logfile, 
 		      '|', 'samtools', 'view', '-u', '/dev/stdin',	

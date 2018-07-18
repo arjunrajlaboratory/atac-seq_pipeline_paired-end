@@ -1,4 +1,8 @@
 #!/bin/bash
+# this if statement is needed for bsub
+if [ -f /etc/profile.d/modules.sh ]; then
+   source /etc/profile.d/modules.sh
+fi
 module load bowtie2/2.3.4.1
 module load java-sdk-1.8.0
 module load samtools-1.1
