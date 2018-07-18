@@ -51,10 +51,11 @@ final_bedpe_file               = '{0}/{1}.{2}'.format(output_dir_sample, sample_
 
 subsampled_tagalign_file       = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'subsampled.tagAlign.gz')
 
+insert_size_histogram_plot     = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'insert_size_histogram.pdf')
+insert_size_histogram_data     = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'insert_size_data.txt')
 pbc_qc_file                    = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.pbc.qc.txt')
 
 #constants
-bt2_multimapping    = 4
 bt2_max_frag_len    = 5000
 n_subsampled_reads  = 10000000
 
@@ -68,7 +69,7 @@ def main():
 
 	logger.info('Aligning reads for sample: {0}'.format(sample_name))
 
-	cmd = ' '.join(['bowtie2', '-k', str(bt2_multimapping), '--local', 
+	cmd = ' '.join(['bowtie2', '--local', 
 		           '--maxins', str(bt2_max_frag_len), '-x', bowtie2_index,
 		           '--threads', n_bowtie2_threads, 
 		           '-1', read1_path, '-2', read2_path, 
@@ -135,6 +136,11 @@ def main():
 	# samtools flagstat ${FINAL_BAM_FILE} > ${FINAL_BAM_FILE_MAPSTATS}
 	logger.debug('Counting read stats for sample: {0}'.format(sample_name))
 	os.system(' '.join(['samtools', 'flagstat', final_bam_file, '>', final_bam_stats]))
+
+	# 
+	logger.debug('Plotting insert size histogram for sample: {0}'.format(sample_name))
+	os.system(' '.join(['CollectInsertSizeMetrics', 'INPUT={0}'.format(final_bam_file),
+						'OUTPUT={0}'.format(insert_size_histogram_data), 'H={0}'.format(insert_size_histogram_plot)])
 
 	# TODO: replace this PBC QC file instructions with the instructions for paired end reads (this part I accidentally did for the single-end read pipeline)
 	# bedtools bamtobed -i ${FILT_BAM_FILE} | awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$6}' | grep -v 'chrM' | sort | uniq -c | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf "%d\t%d\t%d\t%d\t%f\t%f\t%f\n",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}' > ${PBC_FILE_QC}
