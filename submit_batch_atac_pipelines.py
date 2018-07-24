@@ -2,8 +2,8 @@ import sys
 import os
 
 input_data_dir = '/home/esanford/data/history_dependence_pilot_18Jul2018_concatenated_lanes'
-output_dir     = '/home/esanford/dev_atac_seq_pipeline/test_pipeline_outputs'
-num_bowtie2_threads = 3
+output_dir     = '/home/esanford/dev_atac_seq_pipeline/pipeline_outputs'
+num_bowtie2_threads = 2
 
 sample_names = """
 01-EtOH
@@ -21,9 +21,7 @@ sample_names = """
 sample_name_list = sample_names.split()
 # remove already processed samples (subtract one for 0-based indexing):
 # sample_name_list.pop(10 - 1)
-# sample_name_list.pop(6 - 1)
-# sample_name_list.pop(1 - 1)
-
+# sample_name_list = [sample_name_list[6-1]]
 
 for s in sample_name_list:
 	job_cmd = 'bsub -J ' + 'pipeline_' + s + ' -n ' + str(num_bowtie2_threads) + ' ' \
@@ -32,6 +30,6 @@ for s in sample_name_list:
 				   '/home/esanford/dev_atac_seq_pipeline/set_atac_pmacs_env ' \
 			       'python /home/esanford/dev_atac_seq_pipeline/atac_pipeline.py ' \
 			       '{0} {1} {2} {3}'.format(s, input_data_dir, output_dir, num_bowtie2_threads)
-	print job_cmd
+	# print job_cmd
 	os.system(job_cmd)
 
