@@ -6,10 +6,10 @@ import os
 import gzip
 import random
 
-# note: the call to this script should be preprended with a "wrapper" command that sets the paths for the appropriate versions of each tool called in this pipeline
+# note: the call to this script should be preprended with a 'set_atac_pmacs_env' command that sets the paths for the appropriate versions of each tool called in this pipeline. 
 
-#TODO rename intermediate files with more descriptive names
-#TODO general comment cleanup
+# TODO (optional). Rewrite into "functional" style.
+# TODO (optional). Process arguments with argparse
 
 sample_name       = sys.argv[1]
 input_data_dir    = sys.argv[2]
@@ -24,6 +24,7 @@ bowtie2_index     = refs_dir + '/bowtie2/GCA_000001405.15_GRCh38_no_alt_analysis
 gencode_tss_areas = refs_dir + '/GENCODEv24_TSS_hg38_radius500.bed'
 refseq_tss_areas  = refs_dir + '/UCSC_RefSeq_TSS_hg38_radius500.bed'
 chrom_sizes_file  = '/home/esanford/software/bedGraphToBigWig/hg38.chrom.sizes'
+hg38_blacklist    = '/home/esanford/refs/hg38.blacklist.sorted.bed'
 
 #setup output filepaths
 output_dir_sample  = output_dir + '/' + sample_name
@@ -33,8 +34,8 @@ if not os.path.exists(output_dir_sample):
 bowtie2_stderr_logfile         = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'log_stderr_bowtie2.txt')
 bowtie2_aligned_reads          = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'bowtie2_aligned_reads.bam')
 
-tmp_filt_output                = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'tmp.lightFilt.bam')
-tmp_filt_fixmate_output        = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'lightFilt.fixmate.bam')
+tmp_early_filt_output          = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'tmp.lightFilt.bam')
+early_filt_fixmate_output      = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'lightFilt.fixmate.bam')
 filtered_bam_file              = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'filt.bam')
 filtered_bam_file_namesorted   = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'filt.nameSorted.bam')
 picard_metrics_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'picardMetrics.txt')
@@ -47,11 +48,8 @@ early_tagalign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_
 final_tagalign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.tagAlign.gz')
 final_Tn5shifted_tagAlign_file = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.tagAlign_tn5_shifted.gz')
 final_bedpe_file               = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.bedpe.gz')
-macs2_tagAlign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'macs2_formatted.tagAlign.gz')
-macs2_cvg_bedgraph_output      = '{0}/{2}/{1}_treat_pileup.bdg'.format(output_dir_sample, sample_name, 'macs2_output')
-macs2_tmp_sorted_bedgraph_file = '{0}/{2}/{1}.macs2.tmp.sorted.bedGraph'.format(output_dir_sample, sample_name, 'macs2_output')
-macs2_tmp_clipped_bedgraphFile = '{0}/{2}/{1}.macs2.tmp.sorted.clipped.bedGraph'.format(output_dir_sample, sample_name, 'macs2_output')
-macs2_smooth_bigWig_file       = '{0}/{2}/{1}.smoothed_Tn5insertionPoints.bigWig'.format(output_dir_sample, sample_name, 'macs2_output')
+macs2_unsorted_tagAlign_file   = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'macs2_formatted.unsorted.tagAlign')
+macs2_tagAlign_file            = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'Tn5_insertion_points.tagAlign.gz')
 
 
 subsampled_tagalign_file       = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'subsampled.tagAlign.gz')
@@ -64,17 +62,17 @@ gencode_tss_report             = '{0}/{1}.{2}'.format(output_dir_sample, sample_
 pbc_qc_file                    = '{0}/{1}.{2}'.format(output_dir_sample, sample_name, 'final.pbc.qc.txt')
 
 #files to be deleted after pipeline runs
-intermediate_file_list = [tmp_filt_output, tmp_filt_fixmate_output, early_tagalign_file, picard_output, filtered_bam_file_namesorted, filtered_bam_file, 
- final_Tn5shifted_tagAlign_file, picard_output, final_bam_file_namesorted, macs2_tagAlign_file, macs2_tmp_sorted_bedgraph_file, 
- macs2_tmp_clipped_bedgraphFile, macs2_cvg_bedgraph_output]
+intermediate_file_list = [tmp_early_filt_output, early_filt_fixmate_output, early_tagalign_file, filtered_bam_file_namesorted, filtered_bam_file, 
+						  final_Tn5shifted_tagAlign_file, picard_output, final_bam_file_namesorted, macs2_unsorted_tagAlign_file, macs2_tagAlign_file]
 
 #constants
 bt2_max_frag_len    = 5000
 n_subsampled_reads  = 10000000
 # note: in encode atac specification, for "ENCODE3" the window size is 73 and the shift size is -37
-macs2_smoothing_window_size = 150
-macs2_shift_size = -1 * (macs2_smoothing_window_size / 2)
-
+macs2_smoothing_window_sizes = [ 73, 150,  200]
+macs2_shift_sizes            = [-37, -75, -100]   #shift sizes should be int, -1/2 * corresponding smoothing window sizes
+macs2_cap_num_summits        = 300000
+macs2_summit_window_radius   = 50
 
 def main():
 	logger=logging.getLogger()
@@ -111,7 +109,7 @@ def main():
 
 	logger.debug('Removing unmapped reads, reads with unmapped mates, or reads not passing vendor QC, then sorting by QNAME: {0}'.format(sample_name))
 	os.system(' '.join(['samtools', 'view', '-F', '524', '-f', '2', '-u', bowtie2_aligned_reads,
-						'|', 'samtools', 'sort', '-n', '/dev/stdin', tmp_filt_output[:-4]]))
+						'|', 'samtools', 'sort', '-n', '/dev/stdin', tmp_early_filt_output[:-4]]))
 	# samtools view: 
 	#               -F 524   (-F is "blacklist" for certain flag bits)
 	#					bit 512: "not passing filters, such as platform/vendor quality controls"
@@ -121,11 +119,11 @@ def main():
 	#					bit 2: "each segment properly aligned according to the aligner"
 
 	logger.debug('Adding header, filtering out secondary alignments, and fixing mates: {0}'.format(sample_name))
-	os.system(' '.join(['samtools', 'view', '-h', tmp_filt_output, 
-				   '|', 'samtools', 'fixmate', '-r', '/dev/stdin', tmp_filt_fixmate_output]))
+	os.system(' '.join(['samtools', 'view', '-h', tmp_early_filt_output, 
+				   '|', 'samtools', 'fixmate', '-r', '/dev/stdin', early_filt_fixmate_output]))
 
 	logger.debug('Removing low map-quality alignments, optical duplicates, and sorting by position: {0}'.format(sample_name))
-	os.system(' '.join(['samtools', 'view', '-q', '20', '-F', '1804', '-f', '2', '-u', tmp_filt_fixmate_output,
+	os.system(' '.join(['samtools', 'view', '-q', '20', '-F', '1804', '-f', '2', '-u', early_filt_fixmate_output,
 						'|', 'samtools', 'sort', '/dev/stdin', filtered_bam_file[:-4]]))
 	# samtools view: 
 	#               -F 1804  (-F is "blacklist" for certain flag bits)
@@ -165,14 +163,10 @@ def main():
 
 	logger.debug('Running PBC computation and writing report: {0}'.format(sample_name))
 	cmd = "bamToBed -bedpe -i {0}".format(filtered_bam_file_namesorted) + \
-		   " | awk 'BEGIN{OFS=\"\\t\"}{print $1,$2,$3,$6,$9,$10}'" + \
 		   " | grep -v 'chrM' | sort | uniq -c" + \
 		   " | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf \"%d\\t%d\\t%d\\t%d\\t%f\\t%f\\t%f\\n\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}'" + \
 		   " > {0}".format(pbc_qc_file)
 	os.system(cmd)
-
-	logger.debug('Deleting temporary name-sorted filtered BAM file: {0}'.format(sample_name))
-	os.system(' '.join(['rm', filtered_bam_file_namesorted]))
 
 	logger.debug('Plotting insert size histogram for sample: {0}'.format(sample_name))
 	os.system(' '.join(['CollectInsertSizeMetrics', 'INPUT={0}'.format(final_bam_file),
@@ -181,7 +175,7 @@ def main():
 	logger.info('Calculating percent mitochondrial reads for sample: {0}'.format(sample_name))
 
 	logger.debug('Creating tagAlign formatted file for lightly-filtered aligned reads: {0}'.format(sample_name))
-	cmd = "bamToBed -i {0}".format(tmp_filt_fixmate_output) + \
+	cmd = "bamToBed -i {0}".format(early_filt_fixmate_output) + \
 	 r"""| awk 'BEGIN{OFS="\t"}{$4="N";$5="1000";print $0}' """ + \
 		"| gzip -nc > {0}".format(early_tagalign_file)
 	os.system(cmd)
@@ -208,9 +202,9 @@ def main():
 						   float(n_mitochondrial_read_pairs)/float(n_total_read_pairs)]))+'\n')
 
 
-	##################################
-	# Convert PE BAM to tagAlign
-	##################################
+	################################################
+	# Convert PE BAM to tagAlign and BEDPE files
+	################################################
 	
 	# Create "virtual single-ended file" 
 	logger.debug('Creating tagAlign formatted file: {0}'.format(sample_name))
@@ -234,8 +228,6 @@ def main():
 	os.system('samtools sort -n {0} {1}'.format(final_bam_file, final_bam_file_namesorted[:-4]))
 	logger.info('Creating BEDPE file from name-sorted final BAM, excluding mitochondrial reads: {0}'.format(sample_name))
 	os.system("bamToBed -bedpe -mate1 -i {0} | grep -v 'chrM' | gzip -nc > {1}".format(final_bam_file_namesorted, final_bedpe_file))
-	logger.debug('Removing temporary name-sorted final BAM file: {0}'.format(sample_name))
-	os.system('rm {0}'.format(final_bam_file_namesorted))
 
 	logger.debug('Subsampling tagAlign file to {1} reads, excluding chrM: {0}'.format(sample_name, n_subsampled_reads))
 	cmd = 'zcat {0} '.format(final_bedpe_file) + \
@@ -275,7 +267,7 @@ def main():
 	#################################
 
 	logger.debug('Generating tagAlign file for MACS2 peak calling: {0}'.format(sample_name))
-	fout = open(macs2_tagAlign_file[:-3], 'w')
+	fout = open(macs2_unsorted_tagAlign_file, 'w')
 	random.seed(0)
 	with gzip.open(final_bedpe_file, 'rt') as f:
 		for line in f:
@@ -322,60 +314,97 @@ def main():
 				fout.write('\t'.join(map(str, [r1_chr, max_posn, max_posn, 'N', 1000, max_strand])) + '\n')
 	fout.flush()
 	fout.close()
+	os.system(' '.join(['sort', '-k1,1', '-k2,2n', macs2_unsorted_tagAlign_file, '>', macs2_tagAlign_file[:-3]]))
 	os.system('gzip -f {0}'.format(macs2_tagAlign_file[:-3]))
 
 	# note: peak calling parameter set from Omni-ATAC paper: "macs2 callpeak --nomodel --nolambda --keep-dup all --call-summits"
 	logger.info('Calling peaks with MACS2: {0}'.format(sample_name))
 
-	os.system(' '.join(['macs2', 'callpeak', '--nomodel', '--nolambda', '--keep-dup', 'all',
-						'--call-summits', '-B', '--SPMR', '--format', 'BED',
-						'-p', '0.01', '--shift', str(macs2_shift_size), '--extsize', str(macs2_smoothing_window_size),
-						'-t', macs2_tagAlign_file, '--outdir', output_dir_sample + '/macs2_output', '--name', sample_name]))
+	for shiftsize, ext_size in zip(macs2_shift_sizes, macs2_smoothing_window_sizes):
+		macs2_cvg_bedgraph_output      = '{0}/{2}/{1}_treat_pileup.bdg'.format(output_dir_sample, sample_name, 'macs2_output_windowSize{0}'.format(ext_size))
+		macs2_tmp_sorted_bedgraph_file = '{0}/{2}/{1}.macs2.tmp.sorted.bedGraph'.format(output_dir_sample, sample_name, 'macs2_output_windowSize{0}'.format(ext_size))
+		macs2_tmp_clipped_bedgraphFile = '{0}/{2}/{1}.macs2.tmp.sorted.clipped.bedGraph'.format(output_dir_sample, sample_name, 'macs2_output_windowSize{0}'.format(ext_size))
+		macs2_smooth_bigWig_file       = '{0}/{2}/{1}.smoothed_Tn5insertionPoints.bigWig'.format(output_dir_sample, sample_name, 'macs2_output_windowSize{0}'.format(ext_size))
+		[intermediate_file_list.append(x) for x in [macs2_cvg_bedgraph_output, macs2_tmp_sorted_bedgraph_file, macs2_tmp_clipped_bedgraphFile]]
 
-	logger.debug('Sorting temporary bedgraph file from MACS2: {0}'.format(sample_name))
-	os.system(' '.join(['sort', '-k1,1', '-k2,2n', macs2_cvg_bedgraph_output, '>', macs2_tmp_sorted_bedgraph_file]))
+		os.system(' '.join(['macs2', 'callpeak', '--nomodel', '--nolambda', '--keep-dup', 'all',
+							'--call-summits', '-B', '--SPMR', '--format', 'BED',
+							'-p', '0.01', '--shift', str(shiftsize), '--extsize', str(ext_size),
+							'-t', macs2_tagAlign_file, '--outdir', output_dir_sample + '/macs2_output_windowSize{0}'.format(ext_size), 
+							'--name', sample_name]))
 
-	logger.debug('Clipping peak segments larger than chromosome sizes: {0}'.format(sample_name))
-	def make_chr_size_dict(chrom_sizes_file):
-		chr_size_dict = {}
-		with open(chrom_sizes_file) as f:
+		logger.debug('Sorting temporary bedgraph file from MACS2: {0}'.format(sample_name))
+		os.system(' '.join(['sort', '-k1,1', '-k2,2n', macs2_cvg_bedgraph_output, '>', macs2_tmp_sorted_bedgraph_file]))
+
+		logger.debug('Clipping peak segments larger than chromosome sizes: {0}'.format(sample_name))
+		def make_chr_size_dict(chrom_sizes_file):
+			chr_size_dict = {}
+			with open(chrom_sizes_file) as f:
+				for line in f:
+					fields = line.strip().split('\t')
+					chr_name = fields[0]
+					chr_size = int(fields[1])
+					chr_size_dict[chr_name] = chr_size
+			return chr_size_dict
+		chr_size_dict = make_chr_size_dict(chrom_sizes_file)
+
+		fout = open(macs2_tmp_clipped_bedgraphFile, 'w')
+		with open(macs2_tmp_sorted_bedgraph_file) as f:
 			for line in f:
-				fields = line.strip().split('\t')
-				chr_name = fields[0]
-				chr_size = int(fields[1])
-				chr_size_dict[chr_name] = chr_size
-		return chr_size_dict
-	chr_size_dict = make_chr_size_dict(chrom_sizes_file)
+				fields    = line.strip().split('\t')
+				chr_field = fields[0]
+				coord1    = int(fields[1])
+				coord2    = int(fields[2])
+				chr_size  = chr_size_dict[chr_field]
+				if coord1 >= chr_size and coord2 >= chr_size:
+					continue
+				elif coord2 >= chr_size:
+					coord2 = chr_size - 1
+				fout.write('\t'.join(map(str, [chr_field, coord1, coord2, fields[3]])) + '\n')
+		fout.flush()
+		fout.close()
 
-	fout = open(macs2_tmp_clipped_bedgraphFile, 'w')
-	with open(macs2_tmp_sorted_bedgraph_file) as f:
-		for line in f:
-			fields    = line.strip().split('\t')
-			chr_field = fields[0]
-			coord1    = int(fields[1])
-			coord2    = int(fields[2])
-			chr_size  = chr_size_dict[chr_field]
-			if coord1 > chr_size and coord2 > chr_size:
-				continue
-			elif coord2 > chr_size:
-				coord2 = chr_size
-			fout.write('\t'.join(map(str, [chr_field, coord1, coord2, fields[3]])) + '\n')
-	fout.flush()
-	fout.close()
+		macs2_summits_file                  = '{0}/{1}/{2}_summits.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name)
+		macs2_summits_blacklistFilteredfile = '{0}/{1}/{2}_summits.blacklistFiltered.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name)
+		macs2_summits_blFilt_sorted         = '{0}/{1}/{2}_summits.blacklistFiltered.sorted.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name)
+		macs2_summits_top300k               = '{0}/{1}/{2}_summits.top300k.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name)
+		macs2_summits_top300k_posnSorted    = '{0}/{1}/{2}_summits.top300k.posnSorted.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name)
+		macs2_summits_top300k_windows       = '{0}/{1}/{2}_summits.top300k.windowedRadius{3}.bed'.format(output_dir_sample, 'macs2_output_windowSize{0}'.format(ext_size), sample_name, macs2_summit_window_radius)
 
-	logger.debug('Converting bedgraph to bigWig file (for viewing in IGV): {0}'.format(sample_name))
-	os.system(' '.join(['bedGraphToBigWig', macs2_tmp_clipped_bedgraphFile, chrom_sizes_file, macs2_smooth_bigWig_file]))
+		logger.debug('Filtering blacklisted regions out of MACS2 summits: {0}'.format(sample_name))
+		os.system(' '.join(['bedtools', 'intersect', '-v', '-sorted',
+			                '-a', macs2_summits_file, '-b', hg38_blacklist,
+			                '>', macs2_summits_blacklistFilteredfile]))
+
+		#todo: rename peaks by rank?
+		logger.debug('Selecting top {1} summits: {0}'.format(sample_name, macs2_cap_num_summits))
+		os.system(' '.join(['sort', '-k', '5gr,5gr', macs2_summits_blacklistFilteredfile,
+							'>', macs2_summits_blFilt_sorted]))
+		os.system(' '.join(['head', '-n', str(macs2_cap_num_summits), macs2_summits_blFilt_sorted,
+							'>', macs2_summits_top300k]))
+
+		logger.debug('Sorting top MACS2 summits by genomic position: {0}'.format(sample_name))
+		os.system(' '.join(['sort', '-k1,1', '-k2,2n', macs2_summits_top300k,
+							'>', macs2_summits_top300k_posnSorted]))
+
+		logger.debug('Converting summits to small genomic windows: {0}'.format(sample_name))
+		os.system(' '.join(['cat', macs2_summits_top300k_posnSorted, '|', 'awk', 
+						r"""'BEGIN{OFS="\t"}{""" + '$2 = $2 - {0}; $3 = $3 + {0}; print $0'.format(macs2_summit_window_radius) + r"}'",
+						    '>', macs2_summits_top300k_windows]))
 
 
-	# ##################################
-	# # Final step: remove temporary intermediate files
-	# ##################################
+		[intermediate_file_list.append(x) for x in [macs2_summits_blacklistFilteredfile, macs2_summits_blFilt_sorted, macs2_summits_top300k]]
+
+		logger.debug('Converting bedgraph to bigWig file (for viewing in IGV): {0}'.format(sample_name))
+		os.system(' '.join(['bedGraphToBigWig', macs2_tmp_clipped_bedgraphFile, chrom_sizes_file, macs2_smooth_bigWig_file]))
+
+	##################################
+	# Final step: remove temporary intermediate files
+	##################################
 	logger.info('Deleting intermediate files: {0}'.format(sample_name))
 	for f in intermediate_file_list:
 		os.system(' '.join(['rm', f]))
-	
 
-#def _argparser():
 
 if __name__ == '__main__':
     #args = _argparser().parse_args(sys.argv[1:])    
