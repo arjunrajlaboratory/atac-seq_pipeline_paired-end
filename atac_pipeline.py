@@ -158,6 +158,7 @@ def generate_summary_reports(s_obj):
 
 	logger.info('Running PBC computation and writing report: {0}'.format(s_obj.name))
 	cmd = "bamToBed -bedpe -i {0}".format(s_obj.filtered_bam_file_namesorted) + \
+		   " | awk 'BEGIN{OFS=\"\\t\"}{print $1,$2,$3,$6,$9,$10}'" + \
 		   " | grep -v 'chrM' | sort | uniq -c" + \
 		   " | awk 'BEGIN{mt=0;m0=0;m1=0;m2=0} ($1==1){m1=m1+1} ($1==2){m2=m2+1} {m0=m0+1} {mt=mt+$1} END{printf \"%d\\t%d\\t%d\\t%d\\t%f\\t%f\\t%f\\n\",mt,m0,m1,m2,m0/mt,m1/m0,m1/m2}'" + \
 		   " > {0}".format(s_obj.pbc_qc_file)
@@ -367,7 +368,7 @@ def _arg_parser():
 	g = parser.add_argument_group("Parameters")
 	g.add_argument('--num_bowtie2_threads', type=int, default=1,
     	           help='Number of threads for running the bowtie2 aligner in parallel')
-	g.add_argument('--bowtie2_max_fragment_length', type=int, default=5000,
+	g.add_argument('--bowtie2_max_fragment_length', type=int, default=2000,
 				   help="Maximum fragment size to consider for aligning paired end reads")
 	# note: in encode atac specification, for "ENCODE3" the window size is 73 and the shift size is -37. However 150 is the default in Kundaje lab pipeline.
 	g.add_argument('--macs2_smoothing_window_size', type=int, default=150,
