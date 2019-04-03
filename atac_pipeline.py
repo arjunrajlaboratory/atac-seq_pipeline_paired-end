@@ -64,18 +64,25 @@ class ATAC_Sample:
 		self.macs2_tmp_sorted_bedgraph_file = '{0}/{2}/{1}.macs2.tmp.sorted.bedGraph'.format(self.output_data_dir, sample_name, macs2_folder_name)
 		self.macs2_tmp_clipped_bedgraphFile = '{0}/{2}/{1}.macs2.tmp.sorted.clipped.bedGraph'.format(self.output_data_dir, sample_name, macs2_folder_name)
 		self.macs2_smooth_bigWig_file       = '{0}/{2}/{1}.smoothed_Tn5insertionPoints.bigWig'.format(self.output_data_dir, sample_name, macs2_folder_name)
+		#TODO
+		self.macs2_narrowPeak_file               = '{0}/{1}/{2}_peaks.narrowPeak'.format(self.output_data_dir, macs2_folder_name, sample_name)
+		self.macs2_narrowPeak_fullChrsOnly       = '{0}/{1}/{2}_fullChrsOnly.narrowPeak'.format(self.output_data_dir, macs2_folder_name, sample_name)
+		self.macs2_narrowPeak_blacklistFiltered  = '{0}/{1}/{2}_blacklistFiltered.narrowPeak'.format(self.output_data_dir, macs2_folder_name, sample_name)
 		self.macs2_summits_file                  = '{0}/{1}/{2}_summits.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
+		#TODO
+		self.macs2_summits_file_fullChrsOnly     = '{0}/{1}/{2}_summits.fullChrsOnly.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
 		self.macs2_summits_blacklistFilteredfile = '{0}/{1}/{2}_summits.blacklistFiltered.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
+		#TODO
 		self.macs2_summits_blFilt_sorted         = '{0}/{1}/{2}_summits.blacklistFiltered.sorted.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
 		self.macs2_summits_top300k               = '{0}/{1}/{2}_summits.top300k.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
 		self.macs2_summits_top300k_posnSorted    = '{0}/{1}/{2}_summits.top300k.posnSorted.bed'.format(self.output_data_dir, macs2_folder_name, sample_name)
 		self.macs2_summits_top300k_windows       = '{0}/{1}/{2}_summits.top300k.windowedRadius{3}.bed'.format(self.output_data_dir, macs2_folder_name, sample_name, macs2_summit_window_radius)
 
 		#files to be deleted after pipeline runs
-		self.intermediate_file_list = [self.tmp_early_filt_output, self.early_filt_fixmate_output, self.early_tagalign_file, self.filtered_bam_file_namesorted, self.filtered_bam_file, 
-								       self.final_Tn5shifted_tagAlign_file, self.picard_output, self.final_bam_file_namesorted, self.macs2_unsorted_tagAlign_file, self.macs2_tagAlign_file,
-								       self.macs2_cvg_bedgraph_output, self.macs2_tmp_sorted_bedgraph_file, self.macs2_tmp_clipped_bedgraphFile, self.macs2_summits_blacklistFilteredfile,
-								       self.macs2_summits_blFilt_sorted, self.macs2_summits_top300k]
+		self.intermediate_file_list = [self.tmp_early_filt_output, self.early_filt_fixmate_output, self.early_tagalign_file, self.filtered_bam_file_namesorted, 
+								       self.filtered_bam_file, self.picard_output, self.final_bam_file_namesorted, self.macs2_unsorted_tagAlign_file,
+								       self.macs2_cvg_bedgraph_output, self.macs2_tmp_sorted_bedgraph_file, self.macs2_tmp_clipped_bedgraphFile, self.macs2_summits_file_fullChrsOnly,
+								       self.macs2_narrowPeak_fullChrsOnly, self.macs2_summits_blFilt_sorted, self.macs2_summits_top300k]
 
 
 def run_command(cmd):
@@ -333,9 +340,18 @@ def macs2_call_peaks(s_obj, shiftsize, ext_size, macs2_cap_num_summits, macs2_su
 	fout.flush()
 	fout.close()
 
+	fullChrOnly_grep_command = r'grep -E "^(chr1|chr2|chr3|chr4|chr5|chr6|chr7|chr8|chr9|chr10|chr11|chr12|chr13|chr14|chr15|chr16|chr17|chr18|chr19|chr20|chr21|chr22|chrX|chrY)"'
+	logger.info('Filtering non-full-chr contigs out of MACS2 narrowPeak file: {0}'.format(s_obj.name))
+	run_command(' '.join([fullChrOnly_grep_command, s_obj.macs2_narrowPeak_file, ">", s_obj.macs2_narrowPeak_fullChrsOnly]))
+	logger.info('Filtering blacklisted regions out of MACS2 narrowPeak file: {0}'.format(s_obj.name))
+	run_command(' '.join(['bedtools', 'intersect', '-v', '-sorted',
+		                '-a', s_obj.macs2_narrowPeak_fullChrsOnly, '-b', hg38_blacklist,
+		                '>', s_obj.macs2_narrowPeak_blacklistFiltered]))
+	logger.info('Filtering non-full-chr contigs out of MACS2 summits: {0}'.format(s_obj.name))
+	run_command(' '.join([fullChrOnly_grep_command, s_obj.macs2_summits_file, ">", s_obj.macs2_summits_file_fullChrsOnly]))
 	logger.info('Filtering blacklisted regions out of MACS2 summits: {0}'.format(s_obj.name))
 	run_command(' '.join(['bedtools', 'intersect', '-v', '-sorted',
-		                '-a', s_obj.macs2_summits_file, '-b', hg38_blacklist,
+		                '-a', s_obj.macs2_summits_file_fullChrsOnly, '-b', hg38_blacklist,
 		                '>', s_obj.macs2_summits_blacklistFilteredfile]))
 	#optional todo: rename peaks by rank?
 	logger.info('Selecting top {1} summits: {0}'.format(s_obj.name, macs2_cap_num_summits))
