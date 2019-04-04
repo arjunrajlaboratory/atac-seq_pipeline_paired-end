@@ -340,7 +340,7 @@ def macs2_call_peaks(s_obj, shiftsize, ext_size, macs2_cap_num_summits, macs2_su
 	fout.flush()
 	fout.close()
 
-	fullChrOnly_grep_command = r'grep -E "^(chr1|chr2|chr3|chr4|chr5|chr6|chr7|chr8|chr9|chr10|chr11|chr12|chr13|chr14|chr15|chr16|chr17|chr18|chr19|chr20|chr21|chr22|chrX|chrY)"'
+	fullChrOnly_grep_command = r'grep -P "^(chr1|chr2|chr3|chr4|chr5|chr6|chr7|chr8|chr9|chr10|chr11|chr12|chr13|chr14|chr15|chr16|chr17|chr18|chr19|chr20|chr21|chr22|chrX|chrY)\t"'
 	logger.info('Filtering non-full-chr contigs out of MACS2 narrowPeak file: {0}'.format(s_obj.name))
 	run_command(' '.join([fullChrOnly_grep_command, s_obj.macs2_narrowPeak_file, ">", s_obj.macs2_narrowPeak_fullChrsOnly]))
 	logger.info('Filtering blacklisted regions out of MACS2 narrowPeak file: {0}'.format(s_obj.name))
@@ -428,7 +428,7 @@ def main(args):
 	calc_and_write_frac_reads_close_to_TSS(s_obj.final_Tn5shifted_tagAlign_file, refseq_tss_areas, s_obj.refseq_tss_report)
 	logger.info('Calculating fraction of reads overlapping Gencode TSS regions: {0}'.format(s_obj.name))
 	calc_and_write_frac_reads_close_to_TSS(s_obj.final_Tn5shifted_tagAlign_file, gencode_tss_areas, s_obj.gencode_tss_report)
-	# note: peak calling parameter set from Omni-ATAC paper is: "macs2 callpeak --nomodel --nolambda --keep-dup all --call-summits"
+	note: peak calling parameter set from Omni-ATAC paper is: "macs2 callpeak --nomodel --nolambda --keep-dup all --call-summits"
 	logger.info('Calling peaks with MACS2: {0}'.format(s_obj.name))
 	macs2_call_peaks(s_obj, macs2_shift_size, macs2_smoothing_window_size, macs2_cap_num_summits, macs2_summit_window_radius)
 	logger.info('Deleting intermediate files: {0}'.format(s_obj.name))
