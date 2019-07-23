@@ -9,12 +9,12 @@ import random
 #note: the call to this script should be preprended with a 'set_atac_pmacs_env' command that sets the paths for the appropriate versions of each tool called in this pipeline. 
 
 #software references
-refs_dir          = '/home/esanford/refs'
+refs_dir          = '/project/arjunrajlab/refs'
 bowtie2_index     = refs_dir + '/bowtie2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.bowtie_index'
-gencode_tss_areas = refs_dir + '/GENCODEv24_TSS_hg38_radius500.bed'
-refseq_tss_areas  = refs_dir + '/UCSC_RefSeq_TSS_hg38_radius500.bed'
-chrom_sizes_file  = '/home/esanford/software/bedGraphToBigWig/hg38.chrom.sizes'
-hg38_blacklist    = '/home/esanford/refs/hg38.blacklist.sorted.bed'
+gencode_tss_areas = refs_dir + '/atac_pipeline_refs/GENCODEv24_TSS_hg38_radius500.bed'
+refseq_tss_areas  = refs_dir + '/atac_pipeline_refs/UCSC_RefSeq_TSS_hg38_radius500.bed'
+chrom_sizes_file  = refs_dir + '/atac_pipeline_refs/hg38.chrom.sizes'
+hg38_blacklist    = refs_dir + '/atac_pipeline_refs/hg38.blacklist.sorted.bed'
 
 
 class ATAC_Sample:
@@ -428,8 +428,8 @@ def main(args):
 	calc_and_write_frac_reads_close_to_TSS(s_obj.final_Tn5shifted_tagAlign_file, refseq_tss_areas, s_obj.refseq_tss_report)
 	logger.info('Calculating fraction of reads overlapping Gencode TSS regions: {0}'.format(s_obj.name))
 	calc_and_write_frac_reads_close_to_TSS(s_obj.final_Tn5shifted_tagAlign_file, gencode_tss_areas, s_obj.gencode_tss_report)
-	note: peak calling parameter set from Omni-ATAC paper is: "macs2 callpeak --nomodel --nolambda --keep-dup all --call-summits"
 	logger.info('Calling peaks with MACS2: {0}'.format(s_obj.name))
+	## note: peak calling parameter set from Omni-ATAC paper is: "macs2 callpeak --nomodel --nolambda --keep-dup all --call-summits"
 	macs2_call_peaks(s_obj, macs2_shift_size, macs2_smoothing_window_size, macs2_cap_num_summits, macs2_summit_window_radius)
 	logger.info('Deleting intermediate files: {0}'.format(s_obj.name))
 	for f in s_obj.intermediate_file_list:
