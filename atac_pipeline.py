@@ -305,7 +305,7 @@ def macs2_call_peaks(s_obj, shiftsize, ext_size, macs2_cap_num_summits, macs2_su
 
 	run_command(' '.join(['macs2', 'callpeak', '--nomodel', '--nolambda', '--keep-dup', 'all',
 						'--call-summits', '-B', '--SPMR', '--format', 'BED',
-						'-p', '0.01', '--shift', str(shiftsize), '--extsize', str(ext_size),
+						'-q', '0.05', '--shift', str(shiftsize), '--extsize', str(ext_size),
 						'-t', s_obj.macs2_tagAlign_file, '--outdir', s_obj.macs2_output_dir, 
 						'--name', s_obj.name]))
 

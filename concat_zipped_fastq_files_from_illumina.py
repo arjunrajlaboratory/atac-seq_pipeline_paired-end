@@ -4,9 +4,10 @@ import os
 import re
 import time 
 
-base_directory = '/home/esanford/data/HD3_ATAC-seq/data_from_illumina/FASTQ_Generation_2018-10-31_08_01_22Z-134203162'
-output_directory = '/home/esanford/data/HD3_ATAC-seq/concatenated_data'
-replicate = 'rep1'
+
+base_directory = sys.argv[1]     # e.g. '/home/esanford/data/HD3_ATAC-seq/data_from_illumina/FASTQ_Generation_2018-10-31_08_01_22Z-134203162'
+output_directory = sys.argv[2]   # e.g. '/home/esanford/data/HD3_ATAC-seq/concatenated_data'
+# replicate = 'rep1'
 fastq_files = glob.glob(base_directory + '/*/*.fastq*')
 sample_dict = {}
 number_of_lanes = 4
@@ -23,7 +24,9 @@ for f in fastq_files:
 
 	print "{0} : {1}".format(sample_number, sample_name)
 	#sample_key = "{0:02d}-{1}".format(sample_number, sample_name)
+	# sample_key = sample_name + '-' + replicate
 	sample_key = sample_name + '-' + replicate
+
 
 	if sample_key not in sample_dict:
 		sample_dict[sample_key] = []
