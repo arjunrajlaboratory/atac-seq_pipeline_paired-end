@@ -22,7 +22,7 @@ module unload java/openjdk-1.8.0
 module unload samtools-1.1
 module unload R/3.1.1
 module unload python/2.7.9
-module load picard/1.96
+module unload picard/1.96
 module unload FastQC-0.11.2
 module unload homer-v4.6
 deactivate
