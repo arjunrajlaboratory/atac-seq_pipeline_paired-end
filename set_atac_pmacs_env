@@ -3,7 +3,7 @@
 if [ -f /etc/profile.d/modules.sh ]; then
    source /etc/profile.d/modules.sh
 fi
-source /project/arjunrajlab/resources/atac_pipeline_virtual_env/bin/activate
+source /project/arjunrajlab/resources/atac_pipeline_virtual_env/bin/activate  # this loads a virtual environment that contains macs2 2.1.1.20160309
 module load bowtie2/2.3.4.1
 module load java/openjdk-1.8.0
 module load samtools-1.1
